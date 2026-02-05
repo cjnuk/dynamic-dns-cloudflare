@@ -13,6 +13,15 @@ Keep your DNS A records synchronized with your current public IP address using t
 - **systemd integration**: User-level timer for reliable scheduling (default: every 1 minute)
 - **Structured logging**: Outputs to stdout and integrates with journald
 
+## How It Works
+
+1. Fetches your current public IP from multiple services (with fallback)
+2. Compares against the locally cached IP in `.ddns_state.json`
+3. If the IP changed, updates all configured Cloudflare DNS A records via the API
+4. If unchanged, periodically re-verifies with Cloudflare (default: every 60 minutes)
+
+Existing record settings (TTL, proxy/orange-cloud status) are preserved — only the IP address is updated.
+
 ## Requirements
 
 - Python 3.12 or later

@@ -243,11 +243,17 @@ def get_auth_headers() -> dict[str, str] | None:
 
 def get_public_ip() -> str | None:
     """
-    Fetch public IP address from multiple services with fallback.
+    Fetch public IP address from multiple services with consensus.
+
+    Queries all available services and requires at least 2 to agree
+    on the same IP for protection against compromised services.
+    Falls back to a single result if only one service responds.
 
     Returns:
-        Public IP address as string, or None if all services fail.
+        Public IP address as string, or None if no valid IP obtained.
     """
+    valid_ips: list[str] = []
+
     for url, transform in IP_SERVICES:
         try:
             logger.debug(f"Trying IP service: {url}")
@@ -264,13 +270,34 @@ def get_public_ip() -> str | None:
                 logger.warning(f"Non-public IPv4 address from {url}: {ip}")
                 continue
             logger.debug(f"Got IP {ip} from {url}")
-            return ip
+            valid_ips.append(ip)
         except requests.RequestException as e:
             logger.debug(f"Failed to get IP from {url}: {e}")
             continue
 
-    logger.error("Failed to get public IP from all services")
-    return None
+    if not valid_ips:
+        logger.error("Failed to get public IP from all services")
+        return None
+
+    # Find the most common IP (consensus)
+    ip_counts: dict[str, int] = {}
+    for ip in valid_ips:
+        ip_counts[ip] = ip_counts.get(ip, 0) + 1
+
+    best_ip = max(ip_counts, key=ip_counts.get)  # type: ignore[arg-type]
+    best_count = ip_counts[best_ip]
+
+    if best_count >= 2:
+        logger.debug(f"IP consensus: {best_ip} ({best_count}/{len(valid_ips)} services agree)")
+        return best_ip
+
+    if len(valid_ips) == 1:
+        logger.debug(f"Single IP service responded: {valid_ips[0]}")
+        return valid_ips[0]
+
+    # Multiple services responded but disagree
+    logger.warning(f"IP services disagree: {ip_counts} — using most common: {best_ip}")
+    return best_ip
 
 
 def get_dns_record(headers: dict[str, str], zone_id: str, record_name: str) -> dict[str, Any] | None:
@@ -442,6 +469,8 @@ def main() -> int:
     Returns:
         Exit code: 0 on success, 1 on failure.
     """
+    logger.info(f"Cloudflare DDNS updater v{__version__}")
+
     # Load .env from script's directory
     script_dir = Path(__file__).parent.resolve()
     env_file = script_dir / ".env"

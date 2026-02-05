@@ -38,7 +38,7 @@ class TestLoadState:
         """Test loading a valid state file."""
         state_file = tmp_path / ".ddns_state.json"
         state_data = {
-            "last_ip": "203.0.113.42",
+            "last_ip": "1.2.3.4",
             "last_updated": "2024-01-15T10:30:00Z",
             "last_verified": "2024-01-15T11:00:00Z",
         }
@@ -49,7 +49,7 @@ class TestLoadState:
         result = ddns.load_state()
 
         assert result is not None
-        assert result["last_ip"] == "203.0.113.42"
+        assert result["last_ip"] == "1.2.3.4"
         assert result["last_updated"] == "2024-01-15T10:30:00Z"
         assert result["last_verified"] == "2024-01-15T11:00:00Z"
 
@@ -111,11 +111,11 @@ class TestSaveState:
 
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
-        ddns.save_state("203.0.113.42", just_verified=False)
+        ddns.save_state("1.2.3.4", just_verified=False)
 
         assert state_file.exists()
         saved = json.loads(state_file.read_text())
-        assert saved["last_ip"] == "203.0.113.42"
+        assert saved["last_ip"] == "1.2.3.4"
         assert "last_updated" in saved
         assert "last_verified" in saved
 
@@ -123,7 +123,7 @@ class TestSaveState:
         """Test updating an existing state file with new IP."""
         state_file = tmp_path / ".ddns_state.json"
         old_state = {
-            "last_ip": "192.0.2.100",
+            "last_ip": "9.10.11.12",
             "last_updated": "2024-01-10T08:00:00Z",
             "last_verified": "2024-01-10T08:00:00Z",
         }
@@ -131,10 +131,10 @@ class TestSaveState:
 
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
-        ddns.save_state("203.0.113.42", just_verified=False)
+        ddns.save_state("1.2.3.4", just_verified=False)
 
         saved = json.loads(state_file.read_text())
-        assert saved["last_ip"] == "203.0.113.42"
+        assert saved["last_ip"] == "1.2.3.4"
         # Both timestamps should be updated for new IP
         assert saved["last_updated"] != "2024-01-10T08:00:00Z"
 
@@ -143,7 +143,7 @@ class TestSaveState:
         state_file = tmp_path / ".ddns_state.json"
         original_updated = "2024-01-10T08:00:00Z"
         old_state = {
-            "last_ip": "203.0.113.42",
+            "last_ip": "1.2.3.4",
             "last_updated": original_updated,
             "last_verified": "2024-01-10T08:00:00Z",
         }
@@ -151,10 +151,10 @@ class TestSaveState:
 
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
-        ddns.save_state("203.0.113.42", just_verified=True)
+        ddns.save_state("1.2.3.4", just_verified=True)
 
         saved = json.loads(state_file.read_text())
-        assert saved["last_ip"] == "203.0.113.42"
+        assert saved["last_ip"] == "1.2.3.4"
         # last_updated should be preserved
         assert saved["last_updated"] == original_updated
         # last_verified should be updated
@@ -166,7 +166,7 @@ class TestIsVerificationNeeded:
 
     def test_verification_needed_missing_timestamp(self) -> None:
         """Test verification needed when last_verified is missing."""
-        state = {"last_ip": "203.0.113.42"}
+        state = {"last_ip": "1.2.3.4"}
 
         result = ddns.is_verification_needed(state, verify_interval_minutes=60)
 
@@ -176,7 +176,7 @@ class TestIsVerificationNeeded:
         """Test verification needed when timestamp is older than interval."""
         two_hours_ago = datetime.now(timezone.utc) - timedelta(hours=2)
         state = {
-            "last_ip": "203.0.113.42",
+            "last_ip": "1.2.3.4",
             "last_verified": two_hours_ago.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
@@ -188,7 +188,7 @@ class TestIsVerificationNeeded:
         """Test verification not needed when timestamp is fresh."""
         five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
         state = {
-            "last_ip": "203.0.113.42",
+            "last_ip": "1.2.3.4",
             "last_verified": five_minutes_ago.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
@@ -199,7 +199,7 @@ class TestIsVerificationNeeded:
     def test_verification_needed_invalid_timestamp(self) -> None:
         """Test verification needed when timestamp is invalid."""
         state = {
-            "last_ip": "203.0.113.42",
+            "last_ip": "1.2.3.4",
             "last_verified": "not-a-valid-timestamp",
         }
 
@@ -211,7 +211,7 @@ class TestIsVerificationNeeded:
         """Test verification at exact boundary of interval."""
         exactly_60_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=60)
         state = {
-            "last_ip": "203.0.113.42",
+            "last_ip": "1.2.3.4",
             "last_verified": exactly_60_minutes_ago.strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
 
@@ -464,30 +464,33 @@ class TestGetPublicIp:
 
     def test_first_service_success(self, requests_mock: MagicMock) -> None:
         """Test successful IP fetch from first service."""
-        requests_mock.get("https://api.ipify.org", text="203.0.113.42")
+        requests_mock.get("https://api.ipify.org", text="1.2.3.4")
+        requests_mock.get("https://icanhazip.com", text="1.2.3.4\n")
+        requests_mock.get("https://ifconfig.me/ip", text="1.2.3.4")
 
         result = ddns.get_public_ip()
 
-        assert result == "203.0.113.42"
+        assert result == "1.2.3.4"
 
     def test_fallback_to_second_service(self, requests_mock: MagicMock) -> None:
         """Test fallback when first service fails."""
         requests_mock.get("https://api.ipify.org", status_code=500)
-        requests_mock.get("https://icanhazip.com", text="203.0.113.42\n")
+        requests_mock.get("https://icanhazip.com", text="1.2.3.4\n")
+        requests_mock.get("https://ifconfig.me/ip", text="1.2.3.4")
 
         result = ddns.get_public_ip()
 
-        assert result == "203.0.113.42"
+        assert result == "1.2.3.4"
 
     def test_fallback_to_third_service(self, requests_mock: MagicMock) -> None:
         """Test fallback when first two services fail."""
         requests_mock.get("https://api.ipify.org", exc=requests.exceptions.ConnectionError)
         requests_mock.get("https://icanhazip.com", status_code=503)
-        requests_mock.get("https://ifconfig.me/ip", text="  203.0.113.42  \n")
+        requests_mock.get("https://ifconfig.me/ip", text="  1.2.3.4  \n")
 
         result = ddns.get_public_ip()
 
-        assert result == "203.0.113.42"
+        assert result == "1.2.3.4"
 
     def test_all_services_fail(self, requests_mock: MagicMock) -> None:
         """Test None returned when all services fail."""
@@ -502,31 +505,34 @@ class TestGetPublicIp:
     def test_whitespace_stripping(self, requests_mock: MagicMock) -> None:
         """Test that IP services that return whitespace are handled."""
         requests_mock.get("https://api.ipify.org", status_code=500)
-        requests_mock.get("https://icanhazip.com", text="\n  203.0.113.42  \n\n")
+        requests_mock.get("https://icanhazip.com", text="\n  1.2.3.4  \n\n")
+        requests_mock.get("https://ifconfig.me/ip", text="1.2.3.4")
 
         result = ddns.get_public_ip()
 
-        assert result == "203.0.113.42"
+        assert result == "1.2.3.4"
 
     def test_invalid_ip_rejected(self, requests_mock: MagicMock) -> None:
         """Test that non-IPv4 responses are rejected and fallback occurs."""
         # First service returns HTML garbage
         requests_mock.get("https://api.ipify.org", text="<html>Error</html>")
         # Second service returns valid IP
-        requests_mock.get("https://icanhazip.com", text="203.0.113.42\n")
+        requests_mock.get("https://icanhazip.com", text="1.2.3.4\n")
+        requests_mock.get("https://ifconfig.me/ip", text="1.2.3.4")
 
         result = ddns.get_public_ip()
 
-        assert result == "203.0.113.42"
+        assert result == "1.2.3.4"
 
     def test_ipv6_rejected(self, requests_mock: MagicMock) -> None:
         """Test that IPv6 addresses are rejected (only IPv4 A records supported)."""
         requests_mock.get("https://api.ipify.org", text="2001:db8::1")
-        requests_mock.get("https://icanhazip.com", text="203.0.113.42\n")
+        requests_mock.get("https://icanhazip.com", text="1.2.3.4\n")
+        requests_mock.get("https://ifconfig.me/ip", text="1.2.3.4")
 
         result = ddns.get_public_ip()
 
-        assert result == "203.0.113.42"
+        assert result == "1.2.3.4"
 
 
 class TestGetDnsRecord:
@@ -545,7 +551,7 @@ class TestGetDnsRecord:
                     "id": "record-id-456",
                     "name": "home.example.com",
                     "type": "A",
-                    "content": "203.0.113.42",
+                    "content": "1.2.3.4",
                     "ttl": 1,
                 }
             ],
@@ -559,7 +565,7 @@ class TestGetDnsRecord:
 
         assert result is not None
         assert result["id"] == "record-id-456"
-        assert result["content"] == "203.0.113.42"
+        assert result["content"] == "1.2.3.4"
 
     def test_api_error_response(self, requests_mock: MagicMock) -> None:
         """Test handling of API error response."""
@@ -624,7 +630,7 @@ class TestUpdateDnsRecord:
         zone_id = "zone-id-123"
         record_id = "record-id-456"
         record_name = "home.example.com"
-        new_ip = "198.51.100.1"
+        new_ip = "5.6.7.8"
 
         mock_response = {
             "success": True,
@@ -640,7 +646,7 @@ class TestUpdateDnsRecord:
             json=mock_response,
         )
 
-        existing_record = {"id": record_id, "name": record_name, "content": "203.0.113.42", "ttl": 300, "proxied": True}
+        existing_record = {"id": record_id, "name": record_name, "content": "1.2.3.4", "ttl": 300, "proxied": True}
         result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip, existing_record)
 
         assert result is True
@@ -651,7 +657,7 @@ class TestUpdateDnsRecord:
         zone_id = "zone-id-123"
         record_id = "record-id-456"
         record_name = "home.example.com"
-        new_ip = "198.51.100.1"
+        new_ip = "5.6.7.8"
 
         mock_response = {
             "success": False,
@@ -662,7 +668,7 @@ class TestUpdateDnsRecord:
             json=mock_response,
         )
 
-        existing_record = {"id": record_id, "name": record_name, "content": "203.0.113.42", "ttl": 1, "proxied": False}
+        existing_record = {"id": record_id, "name": record_name, "content": "1.2.3.4", "ttl": 1, "proxied": False}
         result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip, existing_record)
 
         assert result is False
@@ -673,14 +679,14 @@ class TestUpdateDnsRecord:
         zone_id = "zone-id-123"
         record_id = "record-id-456"
         record_name = "home.example.com"
-        new_ip = "198.51.100.1"
+        new_ip = "5.6.7.8"
 
         requests_mock.put(
             f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}",
             exc=requests.exceptions.Timeout,
         )
 
-        existing_record = {"id": record_id, "name": record_name, "content": "203.0.113.42", "ttl": 1, "proxied": False}
+        existing_record = {"id": record_id, "name": record_name, "content": "1.2.3.4", "ttl": 1, "proxied": False}
         result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip, existing_record)
 
         assert result is False
@@ -691,11 +697,11 @@ class TestUpdateDnsRecord:
         zone_id = "zone-id-123"
         record_id = "record-id-456"
         record_name = "home.example.com"
-        new_ip = "198.51.100.1"
+        new_ip = "5.6.7.8"
         existing_record = {
             "id": record_id,
             "name": record_name,
-            "content": "203.0.113.42",
+            "content": "1.2.3.4",
             "ttl": 300,
             "proxied": True,
         }
@@ -729,7 +735,7 @@ class TestVerifyAndUpdateRecords:
         """Test when DNS record needs updating."""
         headers = {"Authorization": "Bearer test-token", "Content-Type": "application/json"}
         records = [("zone-id-1", "home.example.com")]
-        public_ip = "198.51.100.1"
+        public_ip = "5.6.7.8"
 
         # Mock get_dns_record response (old IP)
         get_response = {
@@ -739,7 +745,7 @@ class TestVerifyAndUpdateRecords:
                     "id": "record-id-456",
                     "name": "home.example.com",
                     "type": "A",
-                    "content": "203.0.113.42",  # Different from public_ip
+                    "content": "1.2.3.4",  # Different from public_ip
                 }
             ],
         }
@@ -770,7 +776,7 @@ class TestVerifyAndUpdateRecords:
         """Test when DNS record already has correct IP."""
         headers = {"Authorization": "Bearer test-token", "Content-Type": "application/json"}
         records = [("zone-id-1", "home.example.com")]
-        public_ip = "198.51.100.1"
+        public_ip = "5.6.7.8"
 
         # Mock get_dns_record response (same IP)
         get_response = {
@@ -780,7 +786,7 @@ class TestVerifyAndUpdateRecords:
                     "id": "record-id-456",
                     "name": "home.example.com",
                     "type": "A",
-                    "content": "198.51.100.1",  # Same as public_ip
+                    "content": "5.6.7.8",  # Same as public_ip
                 }
             ],
         }
@@ -803,7 +809,7 @@ class TestVerifyAndUpdateRecords:
             ("zone-id-1", "home.example.com"),
             ("zone-id-2", "backup.otherdomain.com"),
         ]
-        public_ip = "198.51.100.1"
+        public_ip = "5.6.7.8"
 
         # First record: success
         get_response_1 = {
@@ -841,7 +847,7 @@ class TestVerifyAndUpdateRecords:
             ("zone-id-1", "home.example.com"),
             ("zone-id-2", "backup.otherdomain.com"),
         ]
-        public_ip = "198.51.100.1"
+        public_ip = "5.6.7.8"
 
         # First record
         get_response_1 = {
@@ -883,7 +889,7 @@ class TestVerifyAndUpdateRecords:
         """Test handling of record with missing ID field."""
         headers = {"Authorization": "Bearer test-token", "Content-Type": "application/json"}
         records = [("zone-id-1", "home.example.com")]
-        public_ip = "198.51.100.1"
+        public_ip = "5.6.7.8"
 
         # Record without id field
         get_response = {
@@ -893,7 +899,7 @@ class TestVerifyAndUpdateRecords:
                     # "id": missing
                     "name": "home.example.com",
                     "type": "A",
-                    "content": "203.0.113.42",
+                    "content": "1.2.3.4",
                 }
             ],
         }
@@ -922,7 +928,7 @@ class TestSaveStateEdgeCases:
         state_file = tmp_path / ".ddns_state.json"
         # Create existing state with different IP
         existing_state = {
-            "last_ip": "203.0.113.99",  # Different from what we'll save
+            "last_ip": "1.2.3.99",  # Different from what we'll save
             "last_updated": "2024-01-15T10:00:00Z",
             "last_verified": "2024-01-15T10:00:00Z",
         }
@@ -931,11 +937,11 @@ class TestSaveStateEdgeCases:
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
         # Save with just_verified=True but different IP
-        ddns.save_state("198.51.100.1", just_verified=True)
+        ddns.save_state("5.6.7.8", just_verified=True)
 
         # Should do full update since IPs don't match
         saved = json.loads(state_file.read_text())
-        assert saved["last_ip"] == "198.51.100.1"
+        assert saved["last_ip"] == "5.6.7.8"
         # Both timestamps should be updated (not preserved)
         assert saved["last_updated"] == saved["last_verified"]
 
@@ -949,7 +955,7 @@ class TestSaveStateEdgeCases:
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
         # Should not raise, just log warning
-        ddns.save_state("198.51.100.1")
+        ddns.save_state("5.6.7.8")
 
         # File should not exist
         assert not state_file.exists()
@@ -962,7 +968,7 @@ class TestVerifyAndUpdateRecordsEdgeCases:
         """Test when update API call fails."""
         headers = {"Authorization": "Bearer test-token", "Content-Type": "application/json"}
         records = [("zone-id-1", "home.example.com")]
-        public_ip = "198.51.100.1"
+        public_ip = "5.6.7.8"
 
         # Get succeeds with different IP
         get_response = {
@@ -1002,7 +1008,7 @@ class TestMain:
         state_file = tmp_path / ".ddns_state.json"
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         state_data = {
-            "last_ip": "198.51.100.1",
+            "last_ip": "5.6.7.8",
             "last_updated": now,
             "last_verified": now,
         }
@@ -1010,7 +1016,9 @@ class TestMain:
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
         # Mock IP service
-        requests_mock.get("https://api.ipify.org", text="198.51.100.1")
+        requests_mock.get("https://api.ipify.org", text="5.6.7.8")
+        requests_mock.get("https://icanhazip.com", text="5.6.7.8\n")
+        requests_mock.get("https://ifconfig.me/ip", text="5.6.7.8")
 
         # Clear env vars to prevent real config interference
         monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
@@ -1044,7 +1052,9 @@ class TestMain:
     ) -> None:
         """Test main() when no auth credentials are configured."""
         # Mock IP service
-        requests_mock.get("https://api.ipify.org", text="198.51.100.1")
+        requests_mock.get("https://api.ipify.org", text="5.6.7.8")
+        requests_mock.get("https://icanhazip.com", text="5.6.7.8\n")
+        requests_mock.get("https://ifconfig.me/ip", text="5.6.7.8")
 
         # No state file - will query API
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: tmp_path / ".ddns_state.json")
@@ -1069,7 +1079,9 @@ class TestMain:
     ) -> None:
         """Test main() when no DNS records are configured."""
         # Mock IP service
-        requests_mock.get("https://api.ipify.org", text="198.51.100.1")
+        requests_mock.get("https://api.ipify.org", text="5.6.7.8")
+        requests_mock.get("https://icanhazip.com", text="5.6.7.8\n")
+        requests_mock.get("https://ifconfig.me/ip", text="5.6.7.8")
 
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: tmp_path / ".ddns_state.json")
 
@@ -1099,7 +1111,9 @@ class TestMain:
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
         # Mock IP service
-        requests_mock.get("https://api.ipify.org", text="198.51.100.1")
+        requests_mock.get("https://api.ipify.org", text="5.6.7.8")
+        requests_mock.get("https://icanhazip.com", text="5.6.7.8\n")
+        requests_mock.get("https://ifconfig.me/ip", text="5.6.7.8")
 
         # Clear all real env vars first
         monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
@@ -1138,7 +1152,7 @@ class TestMain:
         # State should be saved
         assert state_file.exists()
         saved_state = json.loads(state_file.read_text())
-        assert saved_state["last_ip"] == "198.51.100.1"
+        assert saved_state["last_ip"] == "5.6.7.8"
 
     def test_main_update_with_errors(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, requests_mock: MagicMock
@@ -1148,7 +1162,9 @@ class TestMain:
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
         # Mock IP service
-        requests_mock.get("https://api.ipify.org", text="198.51.100.1")
+        requests_mock.get("https://api.ipify.org", text="5.6.7.8")
+        requests_mock.get("https://icanhazip.com", text="5.6.7.8\n")
+        requests_mock.get("https://ifconfig.me/ip", text="5.6.7.8")
 
         # Clear all real env vars first
         monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
@@ -1187,7 +1203,7 @@ class TestMain:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         # Old state with different IP
         state_data = {
-            "last_ip": "203.0.113.42",
+            "last_ip": "1.2.3.4",
             "last_updated": now,
             "last_verified": now,
         }
@@ -1195,7 +1211,9 @@ class TestMain:
         monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
 
         # Mock IP service returns NEW IP
-        requests_mock.get("https://api.ipify.org", text="198.51.100.1")
+        requests_mock.get("https://api.ipify.org", text="5.6.7.8")
+        requests_mock.get("https://icanhazip.com", text="5.6.7.8\n")
+        requests_mock.get("https://ifconfig.me/ip", text="5.6.7.8")
 
         # Clear env vars
         monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
@@ -1215,7 +1233,7 @@ class TestMain:
         # Mock Cloudflare API
         get_response = {
             "success": True,
-            "result": [{"id": "record-1", "name": "home.example.com", "content": "203.0.113.42", "ttl": 1, "proxied": False}],
+            "result": [{"id": "record-1", "name": "home.example.com", "content": "1.2.3.4", "ttl": 1, "proxied": False}],
         }
         requests_mock.get(
             "https://api.cloudflare.com/client/v4/zones/zone-id-1/dns_records",
@@ -1231,7 +1249,7 @@ class TestMain:
 
         assert result == 0
         saved_state = json.loads(state_file.read_text())
-        assert saved_state["last_ip"] == "198.51.100.1"
+        assert saved_state["last_ip"] == "5.6.7.8"
 
 
 # =============================================================================
