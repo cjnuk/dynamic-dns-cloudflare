@@ -1,9 +1,10 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.14"
+# requires-python = ">=3.12"
 # dependencies = [
 #     "requests",
 #     "python-dotenv",
+#     "types-requests",
 # ]
 # ///
 """
@@ -38,9 +39,10 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import requests
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore[import-not-found]  # no stubs available
 
 # Configure logging for systemd/journald compatibility
 logging.basicConfig(
@@ -73,7 +75,7 @@ def get_state_file_path() -> Path:
     return Path(__file__).parent.resolve() / STATE_FILE_NAME
 
 
-def load_state() -> dict | None:
+def load_state() -> dict[str, Any] | None:
     """
     Load cached state from state file.
 
@@ -169,7 +171,7 @@ def get_verify_interval_minutes() -> int:
         return DEFAULT_VERIFY_INTERVAL_MINUTES
 
 
-def is_verification_needed(state: dict, verify_interval_minutes: int) -> bool:
+def is_verification_needed(state: dict[str, Any], verify_interval_minutes: int) -> bool:
     """
     Check if API verification is needed based on last_verified timestamp.
 
@@ -201,7 +203,7 @@ def is_verification_needed(state: dict, verify_interval_minutes: int) -> bool:
         return True
 
 
-def get_auth_headers() -> dict | None:
+def get_auth_headers() -> dict[str, str] | None:
     """
     Build Cloudflare API authentication headers.
 
@@ -245,7 +247,7 @@ def get_public_ip() -> str | None:
             logger.debug(f"Trying IP service: {url}")
             response = requests.get(url, timeout=10)
             response.raise_for_status()
-            ip = response.text
+            ip: str = response.text
             if transform:
                 ip = transform(ip)
             logger.debug(f"Got IP {ip} from {url}")
@@ -258,7 +260,7 @@ def get_public_ip() -> str | None:
     return None
 
 
-def get_dns_record(headers: dict, zone_id: str, record_name: str) -> dict | None:
+def get_dns_record(headers: dict[str, str], zone_id: str, record_name: str) -> dict[str, Any] | None:
     """
     Fetch DNS record details from Cloudflare.
 
@@ -288,7 +290,7 @@ def get_dns_record(headers: dict, zone_id: str, record_name: str) -> dict | None
             logger.error(f"DNS record not found: {record_name}")
             return None
 
-        record = results[0]
+        record: dict[str, Any] = results[0]
         logger.debug(f"Found record {record_name} with IP {record['content']}")
         return record
 
@@ -298,7 +300,7 @@ def get_dns_record(headers: dict, zone_id: str, record_name: str) -> dict | None
 
 
 def update_dns_record(
-    headers: dict, zone_id: str, record_id: str, record_name: str, new_ip: str
+    headers: dict[str, str], zone_id: str, record_id: str, record_name: str, new_ip: str
 ) -> bool:
     """
     Update a DNS record in Cloudflare.
@@ -366,7 +368,7 @@ def get_configured_records() -> list[tuple[str, str]]:
 
 
 def verify_and_update_records(
-    auth_headers: dict, configured_records: list[tuple[str, str]], public_ip: str
+    auth_headers: dict[str, str], configured_records: list[tuple[str, str]], public_ip: str
 ) -> bool:
     """
     Verify DNS records with Cloudflare API and update if needed.
@@ -393,6 +395,11 @@ def verify_and_update_records(
         current_ip = record.get("content")
         record_id = record.get("id")
 
+        if not record_id:
+            logger.error(f"No record ID found for {record_name}")
+            all_success = False
+            continue
+
         if current_ip == public_ip:
             logger.info(f"{record_name} already points to {public_ip}, no update needed")
             continue
@@ -400,7 +407,7 @@ def verify_and_update_records(
         logger.info(f"{record_name} needs update: {current_ip} -> {public_ip}")
 
         # Update the record
-        if not update_dns_record(auth_headers, zone_id, record_id, record_name, public_ip):
+        if not update_dns_record(auth_headers, zone_id, str(record_id), record_name, public_ip):
             all_success = False
 
     return all_success
@@ -419,8 +426,6 @@ def main() -> int:
     if env_file.exists():
         load_dotenv(env_file)
         logger.debug(f"Loaded environment from {env_file}")
-    else:
-        logger.debug(f"No .env file found at {env_file}")
 
     # Get verification interval and log at startup
     verify_interval = get_verify_interval_minutes()
@@ -471,7 +476,7 @@ def main() -> int:
     # Save state
     if all_success:
         # Determine if this was just a verification or a real update
-        just_verified = state and state.get("last_ip") == public_ip
+        just_verified = bool(state and state.get("last_ip") == public_ip)
         save_state(public_ip, just_verified=just_verified)
         logger.info("DDNS update completed successfully")
         return 0

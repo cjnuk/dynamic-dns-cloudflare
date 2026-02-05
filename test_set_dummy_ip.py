@@ -1,9 +1,10 @@
 #!/usr/bin/env -S uv run
 # /// script
-# requires-python = ">=3.14"
+# requires-python = ">=3.12"
 # dependencies = [
 #     "requests",
 #     "python-dotenv",
+#     "types-requests",
 # ]
 # ///
 """
@@ -16,15 +17,16 @@ Reads credentials from .env file in the same directory.
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import requests
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # type: ignore[import-not-found]  # no stubs available
 
 CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4"
 DUMMY_IP = "1.2.3.4"
 
 
-def get_auth_headers() -> dict | None:
+def get_auth_headers() -> dict[str, str] | None:
     """Build Cloudflare API authentication headers."""
     api_token = os.getenv("CLOUDFLARE_API_TOKEN", "").strip()
     if api_token:
@@ -35,7 +37,7 @@ def get_auth_headers() -> dict | None:
     return None
 
 
-def get_dns_record(headers: dict, zone_id: str, record_name: str) -> dict | None:
+def get_dns_record(headers: dict[str, str], zone_id: str, record_name: str) -> dict[str, Any] | None:
     """Fetch DNS record details from Cloudflare."""
     url = f"{CLOUDFLARE_API_BASE}/zones/{zone_id}/dns_records"
     params = {"type": "A", "name": record_name}
@@ -52,13 +54,14 @@ def get_dns_record(headers: dict, zone_id: str, record_name: str) -> dict | None
         if not results:
             return None
 
-        return results[0]
+        result: dict[str, Any] = results[0]
+        return result
     except requests.RequestException:
         return None
 
 
 def update_dns_record(
-    headers: dict, zone_id: str, record_id: str, record_name: str, new_ip: str
+    headers: dict[str, str], zone_id: str, record_id: str, record_name: str, new_ip: str
 ) -> bool:
     """Update a DNS record in Cloudflare."""
     url = f"{CLOUDFLARE_API_BASE}/zones/{zone_id}/dns_records/{record_id}"
@@ -74,7 +77,7 @@ def update_dns_record(
         response = requests.put(url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
-        return data.get("success", False)
+        return bool(data.get("success", False))
     except requests.RequestException:
         return False
 
@@ -118,8 +121,13 @@ def main() -> int:
         record_id = record.get("id")
         current_ip = record.get("content")
 
+        if not record_id:
+            print(f"FAIL: Record {i} ({record_name}) - no record ID")
+            all_success = False
+            continue
+
         # Update
-        if update_dns_record(headers, zone_id, record_id, record_name, DUMMY_IP):
+        if update_dns_record(headers, zone_id, str(record_id), record_name, DUMMY_IP):
             print(f"OK:   Record {i} ({record_name}) - updated from {current_ip} to {DUMMY_IP}")
         else:
             print(f"FAIL: Record {i} ({record_name}) - update failed")
