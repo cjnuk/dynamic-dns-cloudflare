@@ -2,9 +2,8 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "requests",
-#     "python-dotenv",
-#     "types-requests",
+#     "requests>=2.28,<3",
+#     "python-dotenv>=1.0,<2",
 # ]
 # ///
 """
@@ -41,6 +40,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+import ipaddress
 from typing import Any
 
 import requests
@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 # IP lookup services with fallbacks
 IP_SERVICES = [
-    ("https://api.ipify.org", None),
+    ("https://api.ipify.org", str.strip),
     ("https://icanhazip.com", str.strip),
     ("https://ifconfig.me/ip", str.strip),
 ]
@@ -148,8 +148,12 @@ def save_state(ip: str, just_verified: bool = False) -> None:
         }
 
     try:
-        with open(state_file, "w") as f:
+        tmp_file = state_file.with_suffix(".tmp")
+        with open(tmp_file, "w") as f:
             json.dump(state, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp_file.rename(state_file)
         logger.debug(f"Saved state: IP={ip}, verified={now}")
     except OSError as e:
         logger.warning(f"Failed to save state file: {e}")
@@ -252,6 +256,11 @@ def get_public_ip() -> str | None:
             ip: str = response.text
             if transform:
                 ip = transform(ip)
+            try:
+                ipaddress.IPv4Address(ip)
+            except ValueError:
+                logger.warning(f"Invalid IPv4 address from {url}: {ip!r}")
+                continue
             logger.debug(f"Got IP {ip} from {url}")
             return ip
         except requests.RequestException as e:
@@ -302,10 +311,18 @@ def get_dns_record(headers: dict[str, str], zone_id: str, record_name: str) -> d
 
 
 def update_dns_record(
-    headers: dict[str, str], zone_id: str, record_id: str, record_name: str, new_ip: str
+    headers: dict[str, str],
+    zone_id: str,
+    record_id: str,
+    record_name: str,
+    new_ip: str,
+    existing_record: dict[str, Any] | None = None,
 ) -> bool:
     """
     Update a DNS record in Cloudflare.
+
+    Preserves existing TTL and proxy settings from the current record.
+    Only the IP address (content) is changed.
 
     Args:
         headers: Authentication headers from get_auth_headers()
@@ -313,6 +330,7 @@ def update_dns_record(
         record_id: Cloudflare record ID
         record_name: Full DNS record name
         new_ip: New IP address to set
+        existing_record: Current record data from get_dns_record() to preserve settings
 
     Returns:
         True on success, False on failure.
@@ -322,8 +340,8 @@ def update_dns_record(
         "type": "A",
         "name": record_name,
         "content": new_ip,
-        "ttl": 1,  # Auto TTL
-        "proxied": False,
+        "ttl": existing_record.get("ttl", 1) if existing_record else 1,
+        "proxied": existing_record.get("proxied", False) if existing_record else False,
     }
 
     try:
@@ -409,7 +427,7 @@ def verify_and_update_records(
         logger.info(f"{record_name} needs update: {current_ip} -> {public_ip}")
 
         # Update the record
-        if not update_dns_record(auth_headers, zone_id, str(record_id), record_name, public_ip):
+        if not update_dns_record(auth_headers, zone_id, str(record_id), record_name, public_ip, record):
             all_success = False
 
     return all_success
@@ -431,7 +449,7 @@ def main() -> int:
 
     # Get verification interval and log at startup
     verify_interval = get_verify_interval_minutes()
-    logger.info(f"Verification interval: {verify_interval} minutes")
+    logger.debug(f"Verification interval: {verify_interval} minutes")
 
     # Get current public IP first (this is cheap/fast)
     public_ip = get_public_ip()
@@ -447,7 +465,7 @@ def main() -> int:
     if state and state.get("last_ip") == public_ip:
         # IP matches cache - check if verification is needed
         if not is_verification_needed(state, verify_interval):
-            logger.info("IP unchanged, skipping API check")
+            logger.debug("IP unchanged, skipping API check")
             return 0
         else:
             logger.info("IP unchanged but hourly reconfirmation needed, verifying with Cloudflare API")

@@ -29,3 +29,20 @@ venv/
 .idea/
 .vscode/
 *.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup/merge files
+*.bak
+*.orig
+*.rej
+
+# Logs
+*.log
+
+# Python packaging
+*.egg-info/
+dist/
+build/

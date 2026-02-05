@@ -508,6 +508,26 @@ class TestGetPublicIp:
 
         assert result == "203.0.113.42"
 
+    def test_invalid_ip_rejected(self, requests_mock: MagicMock) -> None:
+        """Test that non-IPv4 responses are rejected and fallback occurs."""
+        # First service returns HTML garbage
+        requests_mock.get("https://api.ipify.org", text="<html>Error</html>")
+        # Second service returns valid IP
+        requests_mock.get("https://icanhazip.com", text="203.0.113.42\n")
+
+        result = ddns.get_public_ip()
+
+        assert result == "203.0.113.42"
+
+    def test_ipv6_rejected(self, requests_mock: MagicMock) -> None:
+        """Test that IPv6 addresses are rejected (only IPv4 A records supported)."""
+        requests_mock.get("https://api.ipify.org", text="2001:db8::1")
+        requests_mock.get("https://icanhazip.com", text="203.0.113.42\n")
+
+        result = ddns.get_public_ip()
+
+        assert result == "203.0.113.42"
+
 
 class TestGetDnsRecord:
     """Tests for get_dns_record() function."""
@@ -620,7 +640,8 @@ class TestUpdateDnsRecord:
             json=mock_response,
         )
 
-        result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip)
+        existing_record = {"id": record_id, "name": record_name, "content": "203.0.113.42", "ttl": 300, "proxied": True}
+        result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip, existing_record)
 
         assert result is True
 
@@ -641,7 +662,8 @@ class TestUpdateDnsRecord:
             json=mock_response,
         )
 
-        result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip)
+        existing_record = {"id": record_id, "name": record_name, "content": "203.0.113.42", "ttl": 1, "proxied": False}
+        result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip, existing_record)
 
         assert result is False
 
@@ -658,9 +680,42 @@ class TestUpdateDnsRecord:
             exc=requests.exceptions.Timeout,
         )
 
-        result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip)
+        existing_record = {"id": record_id, "name": record_name, "content": "203.0.113.42", "ttl": 1, "proxied": False}
+        result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip, existing_record)
 
         assert result is False
+
+    def test_preserves_existing_record_settings(self, requests_mock: MagicMock) -> None:
+        """Test that existing TTL and proxy settings are preserved in update payload."""
+        headers = {"Authorization": "Bearer test-token", "Content-Type": "application/json"}
+        zone_id = "zone-id-123"
+        record_id = "record-id-456"
+        record_name = "home.example.com"
+        new_ip = "198.51.100.1"
+        existing_record = {
+            "id": record_id,
+            "name": record_name,
+            "content": "203.0.113.42",
+            "ttl": 300,
+            "proxied": True,
+        }
+
+        mock_response = {"success": True, "result": {"id": record_id, "content": new_ip}}
+        requests_mock.put(
+            f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}",
+            json=mock_response,
+        )
+
+        result = ddns.update_dns_record(headers, zone_id, record_id, record_name, new_ip, existing_record)
+
+        assert result is True
+        # Verify the PUT payload preserved TTL and proxy settings
+        put_request = requests_mock.request_history[-1]
+        import json
+        sent_payload = json.loads(put_request.body)
+        assert sent_payload["ttl"] == 300
+        assert sent_payload["proxied"] is True
+        assert sent_payload["content"] == new_ip
 
 
 # =============================================================================
@@ -1124,6 +1179,60 @@ class TestMain:
         assert result == 1  # Failure
         # State should NOT be saved on failure
         assert not state_file.exists()
+
+    def test_main_ip_changed_from_cached(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, requests_mock: MagicMock
+    ) -> None:
+        """Test main() when IP changes from a previously cached state."""
+        state_file = tmp_path / ".ddns_state.json"
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        # Old state with different IP
+        state_data = {
+            "last_ip": "203.0.113.42",
+            "last_updated": now,
+            "last_verified": now,
+        }
+        state_file.write_text(json.dumps(state_data))
+        monkeypatch.setattr(ddns, "get_state_file_path", lambda: state_file)
+
+        # Mock IP service returns NEW IP
+        requests_mock.get("https://api.ipify.org", text="198.51.100.1")
+
+        # Clear env vars
+        monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+        monkeypatch.delenv("CLOUDFLARE_EMAIL", raising=False)
+        monkeypatch.delenv("CLOUDFLARE_API_KEY", raising=False)
+        for i in range(1, 6):
+            monkeypatch.delenv(f"CLOUDFLARE_ZONE_ID{i}", raising=False)
+            monkeypatch.delenv(f"CLOUDFLARE_RECORD_NAME{i}", raising=False)
+
+        monkeypatch.setattr(ddns, "load_dotenv", lambda x: None)
+
+        # Set test auth and record
+        monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "test-token")
+        monkeypatch.setenv("CLOUDFLARE_ZONE_ID1", "zone-id-1")
+        monkeypatch.setenv("CLOUDFLARE_RECORD_NAME1", "home.example.com")
+
+        # Mock Cloudflare API
+        get_response = {
+            "success": True,
+            "result": [{"id": "record-1", "name": "home.example.com", "content": "203.0.113.42", "ttl": 1, "proxied": False}],
+        }
+        requests_mock.get(
+            "https://api.cloudflare.com/client/v4/zones/zone-id-1/dns_records",
+            json=get_response,
+        )
+        update_response = {"success": True, "result": {"id": "record-1"}}
+        requests_mock.put(
+            "https://api.cloudflare.com/client/v4/zones/zone-id-1/dns_records/record-1",
+            json=update_response,
+        )
+
+        result = ddns.main()
+
+        assert result == 0
+        saved_state = json.loads(state_file.read_text())
+        assert saved_state["last_ip"] == "198.51.100.1"
 
 
 # =============================================================================

@@ -1,7 +1,7 @@
 # Cloudflare Dynamic DNS Updater
 
-![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)
-![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Keep your DNS A records synchronized with your current public IP address using the Cloudflare API.
 
@@ -23,9 +23,18 @@ Keep your DNS A records synchronized with your current public IP address using t
 
 ## Quick Start
 
-1. **Clone or download this repository**
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/cjnuk/dynamic-dns-cloudflare.git
+   cd dynamic-dns-cloudflare
+   ```
 
-2. **Create a `.env` file** with your Cloudflare credentials:
+2. **Create a `.env` file** from the template:
+   ```bash
+   cp .env.example .env
+   chmod 600 .env
+   ```
+   Then edit `.env` with your Cloudflare credentials:
    ```
    CLOUDFLARE_API_TOKEN=your_scoped_api_token_here
    CLOUDFLARE_ZONE_ID1=your_zone_id_here
@@ -57,6 +66,8 @@ Store your credentials in a `.env` file in the repository root. This file is git
 
 **Optional**:
 - `DDNS_VERIFY_INTERVAL_MINUTES` - How often to verify with Cloudflare when IP unchanged (default: 60)
+
+> **Note**: When updating a record, existing TTL and proxy (orange cloud) settings are preserved. Only the IP address is changed.
 
 ### Example `.env`
 ```
@@ -147,14 +158,18 @@ For more details, see `systemd/README.md`.
 journalctl --user -u cloudflare-ddns.service -f
 ```
 
+**Stale Cache / Force Refresh**
+- The script caches the current IP in `.ddns_state.json` to minimize API calls
+- To force a fresh check, delete the state file: `rm .ddns_state.json`
+
 ## Testing
 
 ### Unit Tests
 
-Run the test suite using pytest:
+Run the test suite (dependencies are declared inline in the test script):
 
 ```bash
-uv run pytest test_cloudflare_ddns.py -v
+uv run test_cloudflare_ddns.py -v
 ```
 
 ### Manual Testing
@@ -169,4 +184,4 @@ This script sets a dummy IP to your DNS records, allowing you to confirm that Cl
 
 ## License
 
-MIT
+[MIT](LICENSE)

@@ -28,14 +28,16 @@ If `uv` is not at `~/.local/bin/uv`, update the `ExecStart` path in `cloudflare-
    sudo loginctl enable-linger $USER
    ```
 
-2. Create user systemd directory and copy files:
+2. Ensure your `.env` file is configured (see main [README](../README.md#configuration))
+
+3. Create user systemd directory and copy files:
    ```bash
    mkdir -p ~/.config/systemd/user/
    cp cloudflare-ddns.service ~/.config/systemd/user/
    cp cloudflare-ddns.timer ~/.config/systemd/user/
    ```
 
-3. Reload systemd and enable timer:
+4. Reload systemd and enable timer:
    ```bash
    systemctl --user daemon-reload
    systemctl --user enable cloudflare-ddns.timer
@@ -59,4 +61,16 @@ systemctl --user start cloudflare-ddns.service
 
 # List timers
 systemctl --user list-timers
+```
+
+## Uninstalling
+
+To remove the service and timer:
+
+```bash
+systemctl --user stop cloudflare-ddns.timer
+systemctl --user disable cloudflare-ddns.timer
+rm ~/.config/systemd/user/cloudflare-ddns.service
+rm ~/.config/systemd/user/cloudflare-ddns.timer
+systemctl --user daemon-reload
 ```

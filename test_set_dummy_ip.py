@@ -2,9 +2,8 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "requests",
-#     "python-dotenv",
-#     "types-requests",
+#     "requests>=2.28,<3",
+#     "python-dotenv>=1.0,<2",
 # ]
 # ///
 """
@@ -69,8 +68,8 @@ def update_dns_record(
         "type": "A",
         "name": record_name,
         "content": new_ip,
-        "ttl": 1,
-        "proxied": False,
+        "ttl": 1,  # Auto TTL for test dummy records
+        "proxied": False,  # Disable proxy for test dummy records
     }
 
     try:

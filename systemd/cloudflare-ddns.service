@@ -5,13 +5,37 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
+
 # Update 'dynamic-dns-cloudflare' below if you used a different directory name
 # %h expands to user's home directory
 ExecStart=%h/.local/bin/uv run %h/dynamic-dns-cloudflare/cloudflare_ddns.py
 WorkingDirectory=%h/dynamic-dns-cloudflare
 
-# Logging goes to journald automatically
+# Logging
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=cloudflare-ddns
 
-# Restart behavior handled by timer, not service
+# Timeout: kill if still running after 2 minutes (default for oneshot is infinity)
+TimeoutStartSec=120
+
+# Resource limits
+MemoryMax=128M
+CPUQuota=25%
+TasksMax=8
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=tmpfs
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+
+# Allow read/write to the project directory only
+BindPaths=%h/dynamic-dns-cloudflare
+# Allow read access to uv and its cache
+BindReadOnlyPaths=%h/.local/bin/uv %h/.local/share/uv %h/.cache/uv

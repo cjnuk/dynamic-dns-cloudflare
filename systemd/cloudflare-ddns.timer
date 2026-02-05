@@ -5,7 +5,8 @@ Description=Run Cloudflare DDNS updater every minute
 # Run every minute
 OnBootSec=30
 OnUnitActiveSec=1min
-AccuracySec=1s
+Persistent=true
+AccuracySec=15s
 
 [Install]
 WantedBy=timers.target
