@@ -711,7 +711,6 @@ class TestUpdateDnsRecord:
         assert result is True
         # Verify the PUT payload preserved TTL and proxy settings
         put_request = requests_mock.request_history[-1]
-        import json
         sent_payload = json.loads(put_request.body)
         assert sent_payload["ttl"] == 300
         assert sent_payload["proxied"] is True

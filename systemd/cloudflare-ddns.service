@@ -24,18 +24,7 @@ MemoryMax=128M
 CPUQuota=25%
 TasksMax=8
 
-# Security hardening
+# Security hardening (user-service compatible only)
+# Note: ProtectSystem, ProtectHome, PrivateTmp, ProtectKernel*, BindPaths
+# require CAP_SYS_ADMIN and are NOT compatible with user-level services.
 NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=tmpfs
-PrivateTmp=yes
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectControlGroups=yes
-RestrictNamespaces=yes
-RestrictRealtime=yes
-
-# Allow read/write to the project directory only
-BindPaths=%h/dynamic-dns-cloudflare
-# Allow read access to uv and its cache
-BindReadOnlyPaths=%h/.local/bin/uv %h/.local/share/uv %h/.cache/uv

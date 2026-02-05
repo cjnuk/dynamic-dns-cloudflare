@@ -34,13 +34,13 @@ Environment Variables:
 
 __version__ = "1.0.0"
 
+import ipaddress
 import json
 import logging
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-import ipaddress
 from typing import Any
 
 import requests
@@ -193,7 +193,7 @@ def is_verification_needed(state: dict[str, Any], verify_interval_minutes: int) 
         return True
 
     try:
-        last_verified = datetime.fromisoformat(last_verified_str.replace("Z", "+00:00"))
+        last_verified = datetime.fromisoformat(last_verified_str)
         now = datetime.now(timezone.utc)
         age_minutes = (now - last_verified).total_seconds() / 60
 
@@ -254,12 +254,14 @@ def get_public_ip() -> str | None:
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             ip: str = response.text
-            if transform:
-                ip = transform(ip)
+            ip = transform(ip)
             try:
-                ipaddress.IPv4Address(ip)
+                addr = ipaddress.IPv4Address(ip)
             except ValueError:
                 logger.warning(f"Invalid IPv4 address from {url}: {ip!r}")
+                continue
+            if not addr.is_global:
+                logger.warning(f"Non-public IPv4 address from {url}: {ip}")
                 continue
             logger.debug(f"Got IP {ip} from {url}")
             return ip
@@ -467,8 +469,7 @@ def main() -> int:
         if not is_verification_needed(state, verify_interval):
             logger.debug("IP unchanged, skipping API check")
             return 0
-        else:
-            logger.info("IP unchanged but hourly reconfirmation needed, verifying with Cloudflare API")
+        logger.info("IP unchanged but hourly reconfirmation needed, verifying with Cloudflare API")
     else:
         if state:
             logger.info(f"IP changed from {state.get('last_ip')} to {public_ip}, updating Cloudflare")
