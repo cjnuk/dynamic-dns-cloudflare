@@ -5,8 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/home/chris/dynamic-dns-cloudflare/cloudflare_ddns.py
-WorkingDirectory=/home/chris/dynamic-dns-cloudflare
+# Update 'dynamic-dns-cloudflare' below if you used a different directory name
+# %h expands to user's home directory
+ExecStart=%h/.local/bin/uv run %h/dynamic-dns-cloudflare/cloudflare_ddns.py
+WorkingDirectory=%h/dynamic-dns-cloudflare
 
 # Logging goes to journald automatically
 StandardOutput=journal

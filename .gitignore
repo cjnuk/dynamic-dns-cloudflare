@@ -1,5 +1,31 @@
+# Environment configuration
 .env
+
+# Python artifacts
 *.pyc
 __pycache__/
+
+# State files
 .ddns_state.json
 .state/
+
+# Internal/development files
+.claude/
+CLAUDE.md
+*-prime.md
+
+# Python tools cache
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp

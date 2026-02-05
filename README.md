@@ -1,5 +1,8 @@
 # Cloudflare Dynamic DNS Updater
 
+![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+
 Keep your DNS A records synchronized with your current public IP address using the Cloudflare API.
 
 ## Features
@@ -12,9 +15,11 @@ Keep your DNS A records synchronized with your current public IP address using t
 
 ## Requirements
 
-- Python 3.14 or later
+- Python 3.12 or later
 - [UV](https://docs.astral.sh/uv/) for running standalone scripts
 - Cloudflare account with DNS edit permissions
+
+> **Note**: The DNS A record must already exist in Cloudflare. This tool updates existing records; it does not create new ones.
 
 ## Quick Start
 
@@ -122,6 +127,26 @@ systemctl --user disable cloudflare-ddns.timer
 
 For more details, see `systemd/README.md`.
 
+## Troubleshooting
+
+**Authentication Failed (403 Forbidden)**
+- Verify your API token has "Zone > DNS > Edit" permission
+- Check the token is scoped to the correct zones
+- Ensure no extra whitespace in `.env` values
+
+**Record Not Found**
+- The DNS A record must exist in Cloudflare before running this tool
+- Verify `CLOUDFLARE_RECORD_NAME` matches exactly (e.g., `example.com` vs `www.example.com`)
+
+**IP Detection Failed**
+- Check internet connectivity
+- The tool tries multiple IP services with fallback
+
+**View Logs**
+```bash
+journalctl --user -u cloudflare-ddns.service -f
+```
+
 ## Testing
 
 ### Unit Tests
@@ -141,20 +166,6 @@ uv run test_set_dummy_ip.py
 ```
 
 This script sets a dummy IP to your DNS records, allowing you to confirm that Cloudflare API updates are functioning properly.
-
-## Running Manually
-
-```bash
-./cloudflare_ddns.py
-
-# View logs
-journalctl --user -u cloudflare-ddns.service -f
-
-# Control service
-systemctl --user start cloudflare-ddns.service
-systemctl --user stop cloudflare-ddns.service
-systemctl --user restart cloudflare-ddns.service
-```
 
 ## License
 

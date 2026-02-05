@@ -1,5 +1,26 @@
 # Systemd Installation
 
+## Path Configuration
+
+The service file uses `%h` as a systemd specifier that expands to your user's home directory. This makes the configuration portable across different users and installations.
+
+- `%h` = Your home directory (e.g., `/home/username`)
+- The service expects:
+  - `uv` binary at: `%h/.local/bin/uv`
+  - Script at: `%h/dynamic-dns-cloudflare/cloudflare_ddns.py`
+  - Working directory: `%h/dynamic-dns-cloudflare`
+
+If you installed the project in a different location, edit `cloudflare-ddns.service` and update the paths accordingly.
+
+### Finding Your `uv` Installation
+
+Verify where `uv` is installed:
+```bash
+which uv
+```
+
+If `uv` is not at `~/.local/bin/uv`, update the `ExecStart` path in `cloudflare-ddns.service` to match your installation location.
+
 ## Install as User Service (recommended)
 
 1. Enable lingering for your user (allows services to run without login):
