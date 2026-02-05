@@ -1,0 +1,15 @@
+[Unit]
+Description=Cloudflare Dynamic DNS Updater
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/chris/dynamic-dns-cloudflare/cloudflare_ddns.py
+WorkingDirectory=/home/chris/dynamic-dns-cloudflare
+
+# Logging goes to journald automatically
+StandardOutput=journal
+StandardError=journal
+
+# Restart behavior handled by timer, not service

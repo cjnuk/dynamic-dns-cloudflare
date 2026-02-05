@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Cloudflare DDNS updater every minute
+
+[Timer]
+# Run every minute
+OnBootSec=30
+OnUnitActiveSec=1min
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
